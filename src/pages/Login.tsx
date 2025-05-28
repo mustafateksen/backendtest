@@ -1,36 +1,34 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL || '',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-);
-
-function Login() {
+const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const handleLogin = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (error) {
-      setError(error.message);
-    } else if (data.session) {
-      const { access_token, expires_in } = data.session;
-      document.cookie = `token=${access_token}; max-age=${expires_in}; path=/`;
-      navigate('/dashboard');
+      if (!response.ok) {
+        throw new Error('Login failed');
+      }
+
+      const data = await response.json();
+      console.log('Login successful:', data);
+    } catch (error) {
+      console.error('Error during login:', error);
     }
   };
 
   return (
     <div className="flex items-center justify-center h-screen">
-      <form onSubmit={handleLogin} className="bg-white p-6 rounded shadow-md w-80">
+      <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="bg-white p-6 rounded shadow-md w-80">
         <h1 className="text-2xl font-bold mb-4">Login</h1>
-        {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
         <input
           type="email"
           placeholder="Email"
@@ -51,6 +49,6 @@ function Login() {
       </form>
     </div>
   );
-}
+};
 
 export default Login;
