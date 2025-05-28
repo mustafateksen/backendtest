@@ -5,10 +5,14 @@ function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = document.cookie.split('; ').find(row => row.startsWith('token='));
-    if (!token) {
-      navigate('/login');
-    }
+    fetch('http://localhost:8000/api/auth/verify-token', { credentials: 'include' })
+      .then(res => {
+        if (!res.ok) throw new Error('Token invalid');
+        return res.json();
+      })
+      .catch(() => {
+        navigate('/login');
+      });
   }, [navigate]);
 
   return (

@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const navigate = useNavigate();
 
   const handleLogin = async () => {
     try {
@@ -12,6 +14,7 @@ const Login = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -20,6 +23,7 @@ const Login = () => {
 
       const data = await response.json();
       console.log('Login successful:', data);
+      navigate('/dashboard');
     } catch (error) {
       console.error('Error during login:', error);
     }
