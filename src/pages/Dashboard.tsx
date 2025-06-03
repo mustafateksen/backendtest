@@ -5,19 +5,36 @@ function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/auth/verify-token', { credentials: 'include' })
-      .then(res => {
-        if (!res.ok) throw new Error('Token invalid');
-        return res.json();
-      })
-      .catch(() => {
-        navigate('/login');
-      });
+    const token = document.cookie.split('; ').find(row => row.startsWith('auth_token='));
+    if (!token) {
+      navigate('/login');
+    }
   }, [navigate]);
+
+  // Çıkış fonksiyonu
+  const handleLogout = async () => {
+    try {
+      await fetch('http://localhost:8000/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      navigate('/login');
+    } catch (error) {
+      alert('Çıkış sırasında hata oluştu.');
+    }
+  };
 
   return (
     <div className="flex items-center justify-center h-screen bg-gray-100">
-      <h1 className="text-3xl font-bold">Welcome to the Dashboard</h1>
+      <div>
+        <h1 className="text-3xl font-bold">Welcome to the Dashboard</h1>
+        <button className='mt-20 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600' onClick={handleLogout}>
+          Çıkış yap
+        </button>
+        <div className="mt-10">
+          <a href="/dashboard/users" className="text-blue-600 underline hover:text-blue-800">Users</a>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,10 +1,28 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Kullanıcı zaten giriş yaptıysa dashboard'a yönlendir
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/auth/verify-token', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (response.ok) {
+          navigate('/dashboard');
+        }
+      } catch (error) {
+        // Hata olursa bir şey yapma, kullanıcı login sayfasında kalır
+      }
+    };
+    checkAuth();
+  }, [navigate]);
 
   const handleLogin = async () => {
     try {
