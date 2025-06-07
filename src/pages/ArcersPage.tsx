@@ -9,15 +9,18 @@ interface User {
   role: string;
 }
 
-function UsersPage() {
+function ArcersPage() {
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<User>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addForm, setAddForm] = useState({ email: '', password: '', role: '' });
 
   // Login kontrolü ve kullanıcı rolünü çek
   useEffect(() => {
@@ -31,8 +34,9 @@ function UsersPage() {
           navigate('/login');
         } else {
           const data = await response.json();
-          if (data && data.user && data.user.role) {
+          if (data && data.user) {
             setUserRole(data.user.role);
+            setUserEmail(data.user.email);
           }
         }
       } catch {
@@ -45,7 +49,7 @@ function UsersPage() {
   // Kullanıcıları çek
   useEffect(() => {
     setLoading(true);
-    fetch('http://localhost:8000/api/get-arcers', {
+    fetch('http://localhost:8000/api/arcers', {
       credentials: 'include',
     })
       .then(res => {
@@ -84,7 +88,7 @@ function UsersPage() {
     if (selected.length === 0) return;
     if (!window.confirm('Seçili kullanıcıları silmek istediğinize emin misiniz?')) return;
     try {
-      const res = await fetch('http://localhost:8000/api/delete-users', {
+      const res = await fetch('http://localhost:8000/api/delete-arcers', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -99,25 +103,35 @@ function UsersPage() {
       // Backend yeni format: { results: [{id, status, ...}] }
       if (res.ok && result && Array.isArray(result.results)) {
         const deleted = result.results.filter((r: any) => r.status === 'deleted').map((r: any) => r.id);
+        const deletedSelf = result.results.filter((r: any) => r.status === 'deleted_self').map((r: any) => r.id);
         const unauthorized = result.results.filter((r: any) => r.status === 'forbidden' || r.status === 'forbidden_self').map((r: any) => r.id);
         const notFound = result.results.filter((r: any) => r.status === 'not_found').map((r: any) => r.id);
         const errors = result.results.filter((r: any) => r.status === 'error').map((r: any) => `${r.id}${r.message ? ` (${r.message})` : ''}`);
 
         let alertMsg = '';
         alertMsg += `Silinenler: ${deleted.length > 0 ? deleted.join(', ') : 'Yok'}\n`;
+        alertMsg += `Kendi hesabını silenler: ${deletedSelf.length > 0 ? deletedSelf.join(', ') : 'Yok'}\n`;
         alertMsg += `Yetkisiz: ${unauthorized.length > 0 ? unauthorized.join(', ') : 'Yok'}\n`;
         alertMsg += `Bulunamayanlar: ${notFound.length > 0 ? notFound.join(', ') : 'Yok'}`;
         if (errors.length > 0) {
           alertMsg += `\nHatalı: ${errors.join(', ')}`;
         }
         window.alert(alertMsg);
+        // Eğer kendi hesabı silindiyse logout
+        if (deletedSelf.includes(userEmail)) {
+          window.alert('Hesabınız silindi. Oturumunuz kapatılıyor...');
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 1200);
+          return;
+        }
       } else {
         window.alert('Silme işlemi başarısız oldu.');
       }
       setSelected([]);
       // Kullanıcı listesini tekrar çek
       setLoading(true);
-      fetch('http://localhost:8000/api/get-arcers', {
+      fetch('http://localhost:8000/api/arcers', {
         credentials: 'include',
       })
         .then(res => {
@@ -157,15 +171,118 @@ function UsersPage() {
     setEditForm({});
   };
 
+  // Edit kaydet
+  const saveEdit = async () => {
+    if (!editingId) return;
+    try {
+      const res = await fetch(`http://localhost:8000/api/update-arcer/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: editForm.email,
+          role: editForm.role
+        })
+      });
+      const result = await res.json();
+      if (res.ok) {
+        // Eğer kendi mailini değiştirdiyse ve requireReauth döndüyse logout
+        if (result.requireReauth) {
+          window.alert(result.message || 'Email başarıyla güncellendi. Lütfen tekrar giriş yapın.');
+          // Otomatik logout ve login sayfasına yönlendirme
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 1000);
+          return;
+        }
+        window.alert('Kullanıcı başarıyla güncellendi.');
+        setUsers(users =>
+          users.map(u =>
+            u.id === editingId
+              ? { ...u, email: editForm.email || u.email, role: editForm.role || u.role }
+              : u
+          )
+        );
+        cancelEdit();
+      } else {
+        window.alert(result.error || 'Güncelleme başarısız oldu.');
+      }
+    } catch (e) {
+      window.alert('Güncelleme başarısız oldu.');
+    }
+  };
+
+  // Kullanıcı ekle
+  const handleAddUser = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/add-arcer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: addForm.email,
+          password: addForm.password,
+          role: addForm.role
+        })
+      });
+      const result = await res.json();
+      if (res.ok) {
+        window.alert('Kullanıcı başarıyla eklendi.');
+        setShowAddForm(false);
+        setAddForm({ email: '', password: '', role: '' });
+        // Kullanıcı listesini güncelle
+        setLoading(true);
+        fetch('http://localhost:8000/api/arcers', {
+          credentials: 'include',
+        })
+          .then(res => {
+            if (!res.ok) throw new Error('Kullanıcılar alınamadı');
+            return res.json();
+          })
+          .then(data => {
+            if (Array.isArray(data)) setUsers(data);
+            else if (Array.isArray(data.users)) setUsers(data.users);
+            else setUsers([]);
+          })
+          .catch(() => setUsers([]))
+          .finally(() => setLoading(false));
+      } else {
+        window.alert(result.error || 'Kullanıcı ekleme başarısız oldu.');
+      }
+    } catch (e) {
+      window.alert('Kullanıcı ekleme başarısız oldu.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10">
+      {/* Dashboard'a dön tuşu */}
+      <div className="w-full max-w-3xl flex justify-start mb-4">
+        <button
+          className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-900"
+          onClick={() => navigate('/dashboard')}
+        >
+          Dashboard'a Dön
+        </button>
+      </div>
+      {/* Giriş yapan kullanıcının maili */}
+      {userEmail && (
+        <div className="mb-2 text-base font-medium text-gray-700">
+          Giriş yapan kullanıcı maili: <span className="text-blue-600">{userEmail}</span>
+        </div>
+      )}
       {/* Kullanıcı rolü üstte gösteriliyor */}
       <div className="mb-4 text-lg font-semibold text-gray-700">
         {userRole && <>Giriş yapan kullanıcı rolü: <span className="text-blue-600">{userRole}</span></>}
       </div>
       <div className="w-full max-w-3xl bg-white rounded shadow p-6">
         <div className="flex justify-between items-center mb-4">
-          <button className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Kullanıcı Ekle</button>
+          <button
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            onClick={() => setShowAddForm(true)}
+          >
+            Arcer Ekle
+          </button>
           <input
             type="text"
             placeholder="Kullanıcı ara..."
@@ -174,6 +291,62 @@ function UsersPage() {
             className="border rounded px-3 py-2 w-1/2 focus:outline-none focus:ring-2 focus:ring-blue-300"
           />
         </div>
+        {showAddForm && (
+          <div className="mb-6 p-4 bg-gray-50 rounded border flex flex-col gap-4">
+            <div className="flex gap-4 flex-wrap">
+              <div>
+                <label className="block text-xs text-gray-600">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={addForm.email}
+                  onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                  className="border rounded px-2 py-1"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600">Şifre</label>
+                <input
+                  type="password"
+                  name="password"
+                  value={addForm.password}
+                  onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))}
+                  className="border rounded px-2 py-1"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600">Rol</label>
+                <select
+                  name="role"
+                  value={addForm.role}
+                  onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))}
+                  className="border rounded px-2 py-1"
+                >
+                  <option value="">Seçiniz</option>
+                  <option value="Founder">Founder</option>
+                  <option value="Admin">Admin</option>
+                  <option value="Editor">Editor</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-2">
+              <button
+                className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500"
+                onClick={() => { setShowAddForm(false); setAddForm({ email: '', password: '', role: '' }); }}
+                type="button"
+              >
+                İptal
+              </button>
+              <button
+                className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+                type="button"
+                onClick={handleAddUser}
+              >
+                Ekle
+              </button>
+            </div>
+          </div>
+        )}
         {selected.length > 0 && (
           <div className="flex gap-4 mb-4">
             <button onClick={handleDelete} className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Seçili Kullanıcıları Sil</button>
@@ -269,7 +442,7 @@ function UsersPage() {
                                 <option value="Founder">Founder</option>
                                 <option value="Admin">Admin</option>
                                 <option value="Editor">Editor</option>
-                                <option value="Student">Student</option>
+                                {/* <option value="Student">Student</option> */}
                               </select>
                             </div>
                           </div>
@@ -281,7 +454,13 @@ function UsersPage() {
                             >
                               Kapat
                             </button>
-                            {/* <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Kaydet</button> */}
+                            <button
+                              className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+                              onClick={saveEdit}
+                              type="button"
+                            >
+                              Kaydet
+                            </button>
                           </div>
                         </div>
                       </td>
@@ -297,4 +476,4 @@ function UsersPage() {
   );
 }
 
-export default UsersPage;
+export default ArcersPage;

@@ -32,6 +32,9 @@ function Dashboard() {
           Çıkış yap
         </button>
         <div className="mt-10">
+          <a href="/dashboard/arcers" className="text-blue-600 underline hover:text-blue-800">Arcers</a>
+        </div>
+        <div className="mt-2">
           <a href="/dashboard/users" className="text-blue-600 underline hover:text-blue-800">Users</a>
         </div>
       </div>
