@@ -1,10 +1,58 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+interface User {
+  id: string;
+  email: string;
+  [key: string]: any;
+}
+
+interface Pagination {
+  currentPage: number;
+  totalPages: number;
+  hasMore: boolean;
+  totalItems: number;
+}
+
+const tabApiMap = {
+  Student: { url: '/api/users/student', key: 'students', columns: [
+    { key: 'eduUsername', label: 'Username' },
+    { key: 'bio', label: 'Bio' },
+    { key: 'gender', label: 'Gender' },
+    { key: 'imageSrc', label: 'Image' },
+  ] },
+  Community: { url: '/api/users/community', key: 'communities', columns: [
+    { key: 'eduUsername', label: 'Username' },
+    { key: 'bio', label: 'Bio' },
+    { key: 'logoSrc', label: 'Logo' },
+    { key: 'isVerifiedAccount', label: 'Verified Account' },
+    { key: 'isVerifiedOrganization', label: 'Verified Organization' },
+  ] },
+  Company: { url: '/api/users/company', key: 'companies', columns: [
+    { key: 'eduUsername', label: 'Username' },
+    { key: 'bio', label: 'Bio' },
+    { key: 'logoSrc', label: 'Logo' },
+    { key: 'isVerifiedAccount', label: 'Verified Account' },
+    { key: 'isVerifiedOrganization', label: 'Verified Organization' },
+  ] },
+  Educator: { url: '/api/users/educator', key: 'educators', columns: [
+    { key: 'eduUsername', label: 'Username' },
+    { key: 'about', label: 'About' },
+    { key: 'imageSrc', label: 'Image' },
+    { key: 'gender', label: 'Gender' },
+    { key: 'isVerifiedAccount', label: 'Verified Account' },
+  ] },
+};
+
 function UsersPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'Student' | 'Community' | 'Company' | 'Educator'>('Student');
   const [authChecked, setAuthChecked] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ currentPage: 1, totalPages: 1, hasMore: false, totalItems: 0 });
+  const [limit, setLimit] = useState(15); // Sayfa başı kullanıcı
 
   // Login kontrolü
   useEffect(() => {
@@ -26,38 +74,106 @@ function UsersPage() {
     checkAuth();
   }, [navigate]);
 
+  // Tab ve sayfa değişince kullanıcıları çek
+  useEffect(() => {
+    if (!authChecked) return;
+    setLoading(true);
+    setUsers([]);
+    setSelected([]);
+    const { url, key } = tabApiMap[activeTab];
+    fetch(`http://localhost:8000${url}?page=${pagination.currentPage}&limit=${limit}` , {
+      credentials: 'include',
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Kullanıcılar alınamadı');
+        return res.json();
+      })
+      .then(data => {
+        // CampusArc API pagination: { students: [...], pagination: {...} } veya { students: [...], page: 1, totalPages: 5, ... }
+        if (Array.isArray(data[key])) setUsers(data[key]);
+        else setUsers([]);
+        // Pagination bilgisi farklı formatlarda gelebilir
+        if (data.pagination) {
+          setPagination({
+            currentPage: data.pagination.currentPage || data.page || 1,
+            totalPages: data.pagination.totalPages || data.totalPages || 1,
+            hasMore: data.pagination.hasMore ?? (data.pagination.currentPage < data.pagination.totalPages),
+            totalItems: data.pagination.totalItems || data.totalItems || 0,
+          });
+        } else {
+          setPagination(prev => ({
+            ...prev,
+            currentPage: data.page || prev.currentPage,
+            totalPages: data.totalPages || prev.totalPages,
+            hasMore: typeof data.hasMore === 'boolean' ? data.hasMore : (data.page < data.totalPages),
+            totalItems: data.totalItems || prev.totalItems,
+          }));
+        }
+      })
+      .catch(() => {
+        setUsers([]);
+        setPagination({ currentPage: 1, totalPages: 1, hasMore: false, totalItems: 0 });
+      })
+      .finally(() => setLoading(false));
+  }, [activeTab, authChecked, pagination.currentPage, limit]);
+
+  // Sayfa değiştir
+  const goToPage = (page: number) => {
+    setPagination(prev => ({ ...prev, currentPage: page }));
+  };
+
+  // Pagination değişince yeni veri çek
+  useEffect(() => {
+    if (!authChecked) return;
+    setLoading(true);
+    setUsers([]);
+    setSelected([]);
+    const { url, key } = tabApiMap[activeTab];
+    fetch(`http://localhost:8000${url}?page=${pagination.currentPage}&limit=${limit}` , {
+      credentials: 'include',
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Kullanıcılar alınamadı');
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data[key])) setUsers(data[key]);
+        else setUsers([]);
+        setPagination(prev => ({ ...prev, ...(data.pagination || { currentPage: 1, totalPages: 1, hasMore: false, totalItems: 0 }) }));
+      })
+      .catch(() => {
+        setUsers([]);
+        setPagination(prev => ({ ...prev, currentPage: 1, totalPages: 1, hasMore: false, totalItems: 0 }));
+      })
+      .finally(() => setLoading(false));
+  }, [activeTab, authChecked, pagination.currentPage, limit]);
+
+  // Tab değişince sayfa 1'e dön
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, currentPage: 1 }));
+  }, [activeTab]);
+
+  // Checkbox işlemleri
+  const toggleSelect = (id: string) => {
+    setSelected(sel => sel.includes(id) ? sel.filter(i => i !== id) : [...sel, id]);
+  };
+  const allSelected = selected.length === users.length && users.length > 0;
+  const toggleSelectAll = () => {
+    if (allSelected) setSelected([]);
+    else setSelected(users.map(u => u.id));
+  };
+
+  // Send mail butonu
+  const handleSendMail = () => {
+    alert('Seçili kullanıcılara mail gönderilecek: ' + selected.join(', '));
+  };
+
   if (!authChecked) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10">
-      <div className="w-full max-w-2xl bg-white rounded shadow p-6">
-        {/* Tab Navigation */}
-        <div className="flex justify-between mb-8 border-b">
-          {['Student', 'Community', 'Company', 'Educator'].map(tab => (
-            <button
-              key={tab}
-              className={`px-4 py-2 font-semibold border-b-2 transition-colors duration-150 ${activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-blue-500'}`}
-              onClick={() => setActiveTab(tab as any)}
-              type="button"
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-        {/* Tab Content */}
-        {activeTab === 'Student' && (
-          <div className="text-gray-700 text-center py-10">Student tabı içeriği</div>
-        )}
-        {activeTab === 'Community' && (
-          <div className="text-gray-700 text-center py-10">Community tabı içeriği</div>
-        )}
-        {activeTab === 'Company' && (
-          <div className="text-gray-700 text-center py-10">Company tabı içeriği</div>
-        )}
-        {activeTab === 'Educator' && (
-          <div className="text-gray-700 text-center py-10">Educator tabı içeriği</div>
-        )}
-        {/* Dashboard'a dön butonu */}
+      <div className="w-full max-w-5xl bg-white rounded shadow p-8">
+        
         <div className="flex justify-end mt-8">
           <button
             className="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-900"
@@ -66,6 +182,111 @@ function UsersPage() {
             Dashboard'a Dön
           </button>
         </div>
+        {/* Tab Navigation */}
+        <div className="flex justify-between mb-8 border-b">
+          {(['Student', 'Community', 'Company', 'Educator'] as const).map(tab => (
+            <button
+              key={tab}
+              className={`px-4 py-2 font-semibold border-b-2 transition-colors duration-150 ${activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-blue-500'}`}
+              onClick={() => {
+                setActiveTab(tab);
+                setPagination({ currentPage: 1, totalPages: 1, hasMore: false, totalItems: 0 });
+              }}
+              type="button"
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+        {/* Sayfa başı kullanıcı sayısı seçimi */}
+        <div className="flex items-center justify-end mb-4 gap-2">
+          <label htmlFor="perPage" className="text-sm text-gray-600">Sayfa başı:</label>
+          <select
+            id="perPage"
+            className="border rounded px-2 py-1 text-sm"
+            value={limit}
+            onChange={e => {
+              setPagination(prev => ({ ...prev, currentPage: 1 }));
+              setLimit(Number(e.target.value));
+            }}
+          >
+            <option value={5}>5</option>
+            <option value={15}>15</option>
+            <option value={30}>30</option>
+          </select>
+        </div>
+        {/* Send mail(s) butonu */}
+        {selected.length > 0 && (
+          <div className="flex justify-end mb-4">
+            <button
+              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+              onClick={handleSendMail}
+            >
+              Send mail(s)
+            </button>
+          </div>
+        )}
+        {/* Tab Content: Kullanıcı listesi */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white border rounded">
+            <thead>
+              <tr>
+                <th className="p-2 border-b"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} /></th>
+                {tabApiMap[activeTab].columns.map(col => (
+                  <th key={col.key} className="p-2 border-b">{col.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={tabApiMap[activeTab].columns.length + 1} className="text-center py-6">Yükleniyor...</td></tr>
+              ) : users.length === 0 ? (
+                <tr><td colSpan={tabApiMap[activeTab].columns.length + 1} className="text-center py-6">Kullanıcı bulunamadı.</td></tr>
+              ) : users.map((user, idx) => (
+                <tr key={user.id || user.eduUsername || user.name || idx} className="hover:bg-gray-50">
+                  <td className="p-2 border-b text-center">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(user.id || user.eduUsername || user.name || String(idx))}
+                      onChange={() => toggleSelect(user.id || user.eduUsername || user.name || String(idx))}
+                    />
+                  </td>
+                  {tabApiMap[activeTab].columns.map(col => (
+                    <td key={col.key} className="p-2 border-b">
+                      {col.key === 'imageSrc' && user[col.key] ? (
+                        <img src={user[col.key]} alt="profile" className="w-8 h-8 rounded-full object-cover" />
+                      ) : col.key === 'logoSrc' && user[col.key] ? (
+                        <img src={user[col.key]} alt="logo" className="w-8 h-8 rounded object-contain bg-white border" />
+                      ) : typeof user[col.key] === 'boolean' ? (
+                        <span className={user[col.key] ? 'text-green-600 font-bold' : 'text-gray-400'}>{user[col.key] ? 'Yes' : 'No'}</span>
+                      ) : (user[col.key] ?? <span className="text-gray-400">-</span>)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {/* Pagination */}
+        <div className="flex justify-center items-center gap-2 mt-4">
+          <button
+            className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+            onClick={() => goToPage(pagination.currentPage - 1)}
+            disabled={pagination.currentPage === 1 || loading}
+          >
+            Önceki
+          </button>
+          <span className="mx-2">{pagination.currentPage} / {pagination.totalPages}</span>
+          <button
+            className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+            onClick={() => goToPage(pagination.currentPage + 1)}
+            disabled={pagination.currentPage === pagination.totalPages || loading}
+          >
+            Sonraki
+          </button>
+        </div>
+        {/* Dashboard'a dön butonu */}
+        
       </div>
     </div>
   );
