@@ -131,10 +131,8 @@ function ArcersPage() {
           (userEmail && deleted.includes(userEmail)) ||
           (userEmail && errors.some((err: string) => err.includes(userEmail)))
         ) {
-          window.alert('Hesabınız silindi veya silinirken hata oluştu. Oturumunuz kapatılıyor...');
-          setTimeout(() => {
-            window.location.href = '/login';
-          }, 1200);
+          // Alert kapatıldıktan sonra yönlendir (React navigate ile)
+          navigate('/login', { replace: true });
           return;
         }
       } else {
