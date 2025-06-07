@@ -4,10 +4,10 @@ import { useNavigate } from 'react-router-dom';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [authChecked, setAuthChecked] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Kullanıcı zaten giriş yaptıysa dashboard'a yönlendir
     const checkAuth = async () => {
       try {
         const response = await fetch('http://localhost:8000/api/auth/verify-token', {
@@ -15,10 +15,12 @@ const Login = () => {
           credentials: 'include',
         });
         if (response.ok) {
-          navigate('/dashboard');
+          navigate('/dashboard', { replace: true });
+        } else {
+          setAuthChecked(true); // login değilse sadece ekrana bırak
         }
-      } catch (error) {
-        // Hata olursa bir şey yapma, kullanıcı login sayfasında kalır
+      } catch {
+        setAuthChecked(true);
       }
     };
     checkAuth();
@@ -46,6 +48,8 @@ const Login = () => {
       console.error('Error during login:', error);
     }
   };
+
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
 
   return (
     <div className="flex items-center justify-center h-screen">

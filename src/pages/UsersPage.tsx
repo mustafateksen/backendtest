@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 function UsersPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'Student' | 'Community' | 'Company' | 'Educator'>('Student');
-  const [loading, setLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
 
   // Login kontrolü
   useEffect(() => {
@@ -15,18 +15,18 @@ function UsersPage() {
           credentials: 'include',
         });
         if (!response.ok) {
-          navigate('/login');
+          navigate('/login', { replace: true });
         }
       } catch {
-        navigate('/login');
+        navigate('/login', { replace: true });
       } finally {
-        setLoading(false);
+        setAuthChecked(true);
       }
     };
     checkAuth();
   }, [navigate]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10">

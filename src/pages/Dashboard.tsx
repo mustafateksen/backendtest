@@ -1,15 +1,35 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 function Dashboard() {
   const navigate = useNavigate();
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const token = document.cookie.split('; ').find(row => row.startsWith('auth_token='));
-    if (!token) {
-      navigate('/login');
-    }
+    let isMounted = true;
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/auth/verify-token', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          if (isMounted) setAuthChecked(true);
+          navigate('/login', { replace: true });
+          return;
+        }
+      } catch {
+        if (isMounted) setAuthChecked(true);
+        navigate('/login', { replace: true });
+        return;
+      }
+      if (isMounted) setAuthChecked(true);
+    };
+    checkAuth();
+    return () => { isMounted = false; };
   }, [navigate]);
+
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
 
   // Çıkış fonksiyonu
   const handleLogout = async () => {
