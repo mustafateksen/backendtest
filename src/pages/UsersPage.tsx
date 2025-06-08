@@ -17,31 +17,98 @@ interface Pagination {
 const tabApiMap = {
   Student: { url: '/api/users/student', key: 'students', columns: [
     { key: 'eduUsername', label: 'Username' },
-    { key: 'bio', label: 'Bio' },
-    { key: 'gender', label: 'Gender' },
-    { key: 'imageSrc', label: 'Image' },
-  ] },
-  Community: { url: '/api/users/community', key: 'communities', columns: [
-    { key: 'eduUsername', label: 'Username' },
-    { key: 'bio', label: 'Bio' },
-    { key: 'logoSrc', label: 'Logo' },
-    { key: 'isVerifiedAccount', label: 'Verified Account' },
-    { key: 'isVerifiedOrganization', label: 'Verified Organization' },
-  ] },
-  Company: { url: '/api/users/company', key: 'companies', columns: [
-    { key: 'eduUsername', label: 'Username' },
-    { key: 'bio', label: 'Bio' },
-    { key: 'logoSrc', label: 'Logo' },
-    { key: 'isVerifiedAccount', label: 'Verified Account' },
-    { key: 'isVerifiedOrganization', label: 'Verified Organization' },
-  ] },
-  Educator: { url: '/api/users/educator', key: 'educators', columns: [
-    { key: 'eduUsername', label: 'Username' },
-    { key: 'about', label: 'About' },
+    { key: 'name', label: 'Name' },
+    { key: 'surname', label: 'Surname' },
     { key: 'imageSrc', label: 'Image' },
     { key: 'gender', label: 'Gender' },
+    { key: 'institution', label: 'Institution' },
+    { key: 'department', label: 'Department' },
+    { key: 'grade', label: 'Grade' },
+    { key: 'bio', label: 'Bio' },
     { key: 'isVerifiedAccount', label: 'Verified Account' },
+    { key: 'isEduMailVerified', label: 'Edu Mail Verified' },
+    { key: 'arxps', label: 'XP' },
+    { key: 'createdAt', label: 'Created At' },
+    { key: 'updatedAt', label: 'Updated At' },
   ] },
+  Community: {
+    url: '/api/users/community',
+    key: 'communities',
+    columns: [
+      { key: 'logoSrc', label: 'Logo' },
+      { key: 'eduUsername', label: 'Username' },
+      { key: 'fullName', label: 'Full Name' },
+      { key: 'abbreviation', label: 'Abbreviation' },
+      { key: 'foundingYear', label: 'Founding Year' },
+      { key: 'fields', label: 'Fields' },
+      { key: 'bio', label: 'Bio' },
+      { key: 'about', label: 'About' },
+      { key: 'website', label: 'Website' },
+      { key: 'linkedin', label: 'LinkedIn' },
+      { key: 'twitter', label: 'Twitter' },
+      { key: 'instagram', label: 'Instagram' },
+      { key: 'youtube', label: 'YouTube' },
+      { key: 'university', label: 'University' },
+      { key: 'campusLocation', label: 'Campus' },
+      { key: 'buildingName', label: 'Building' },
+      { key: 'roomNumber', label: 'Room' },
+      { key: 'city', label: 'City' },
+      { key: 'country', label: 'Country' },
+      { key: 'contactMail', label: 'Contact Mail' },
+      { key: 'isVerifiedAccount', label: 'Verified Account' },
+      { key: 'isVerifiedOrganization', label: 'Verified Organization' },
+      { key: 'arxps', label: 'XP' },
+      { key: 'members', label: 'Members' },
+      { key: 'followers', label: 'Followers' },
+      { key: 'followings', label: 'Followings' },
+      { key: 'createdAt', label: 'Created At' },
+      { key: 'updatedAt', label: 'Updated At' },
+    ],
+  },
+  Company: {
+    url: '/api/users/company',
+    key: 'companies',
+    columns: [
+      { key: 'logoSrc', label: 'Logo' },
+      { key: 'eduUsername', label: 'Username' },
+      { key: 'fullName', label: 'Full Name' },
+      { key: 'foundingYear', label: 'Founding Year' },
+      { key: 'sectors', label: 'Sectors' },
+      { key: 'size', label: 'Size' },
+      { key: 'bio', label: 'Bio' },
+      { key: 'about', label: 'About' },
+      { key: 'websiteUrl', label: 'Website' },
+      { key: 'contactMail', label: 'Contact Mail' },
+      { key: 'isOfficialMailVerified', label: 'Official Mail Verified' },
+      { key: 'isVerifiedAccount', label: 'Verified Account' },
+      { key: 'isVerifiedOrganization', label: 'Verified Organization' },
+      { key: 'arxps', label: 'XP' },
+      { key: 'followers', label: 'Followers' },
+      { key: 'followings', label: 'Followings' },
+      { key: 'createdAt', label: 'Created At' },
+      { key: 'updatedAt', label: 'Updated At' },
+    ],
+  },
+  Educator: {
+    url: '/api/users/educator',
+    key: 'educators',
+    columns: [
+      { key: 'eduUsername', label: 'Username' },
+      { key: 'name', label: 'Name' },
+      { key: 'surname', label: 'Surname' },
+      { key: 'gender', label: 'Gender' },
+      { key: 'institution', label: 'Institution' },
+      { key: 'titles', label: 'Titles' },
+      { key: 'bio', label: 'Bio' },
+      { key: 'about', label: 'About' },
+      { key: 'imageSrc', label: 'Image' },
+      { key: 'isVerifiedAccount', label: 'Verified Account' },
+      { key: 'isEduMailVerified', label: 'Edu Mail Verified' },
+      { key: 'arxps', label: 'XP' },
+      { key: 'followers', label: 'Followers' },
+      { key: 'followings', label: 'Followings' },
+    ],
+  },
 };
 
 function UsersPage() {
@@ -257,6 +324,21 @@ function UsersPage() {
                         <img src={user[col.key]} alt="profile" className="w-8 h-8 rounded-full object-cover" />
                       ) : col.key === 'logoSrc' && user[col.key] ? (
                         <img src={user[col.key]} alt="logo" className="w-8 h-8 rounded object-contain bg-white border" />
+                      ) : Array.isArray(user[col.key]) ? (
+                        user[col.key].length > 0 ? user[col.key].join(', ') : <span className="text-gray-400">-</span>
+                      ) : (['website','linkedin','twitter','instagram','youtube'].includes(col.key) && user[col.key]) ? (
+                        <a href={user[col.key].startsWith('http') ? user[col.key] : `https://${user[col.key]}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{col.label}</a>
+                      ) : col.key === 'contactMail' && user[col.key] ? (
+                        <a href={`mailto:${user[col.key]}`} className="text-blue-600 underline">{user[col.key]}</a>
+                      ) : (col.key === 'members' || col.key === 'followers' || col.key === 'followings') && Array.isArray(user[col.key]) ? (
+                        user[col.key].length
+                      ) : (col.key === 'bio' || col.key === 'about') && user[col.key] ? (
+                        // Strip HTML tags for display
+                        (user[col.key] as string).replace(/<[^>]+>/g, '').slice(0, 120) + (user[col.key].length > 120 ? '…' : '')
+                      ) : (col.key === 'createdAt' || col.key === 'updatedAt') && user[col.key] ? (
+                        new Date(user[col.key]).toLocaleString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      ) : col.key === 'arxps' && typeof user[col.key] === 'number' ? (
+                        user[col.key].toLocaleString('en-US')
                       ) : typeof user[col.key] === 'boolean' ? (
                         <span className={user[col.key] ? 'text-green-600 font-bold' : 'text-gray-400'}>{user[col.key] ? 'Yes' : 'No'}</span>
                       ) : (user[col.key] ?? <span className="text-gray-400">-</span>)}
