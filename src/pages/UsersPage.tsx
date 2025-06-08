@@ -19,6 +19,7 @@ const tabApiMap = {
     { key: 'eduUsername', label: 'Username' },
     { key: 'name', label: 'Name' },
     { key: 'surname', label: 'Surname' },
+    { key: 'email', label: 'Email' }, // email = signUpMail
     { key: 'imageSrc', label: 'Image' },
     { key: 'gender', label: 'Gender' },
     { key: 'institution', label: 'Institution' },
@@ -38,6 +39,7 @@ const tabApiMap = {
       { key: 'logoSrc', label: 'Logo' },
       { key: 'eduUsername', label: 'Username' },
       { key: 'fullName', label: 'Full Name' },
+      { key: 'email', label: 'Email' }, // email = signUpMail
       { key: 'abbreviation', label: 'Abbreviation' },
       { key: 'foundingYear', label: 'Founding Year' },
       { key: 'fields', label: 'Fields' },
@@ -72,6 +74,7 @@ const tabApiMap = {
       { key: 'logoSrc', label: 'Logo' },
       { key: 'eduUsername', label: 'Username' },
       { key: 'fullName', label: 'Full Name' },
+      { key: 'email', label: 'Email' }, // email = signUpMail
       { key: 'foundingYear', label: 'Founding Year' },
       { key: 'sectors', label: 'Sectors' },
       { key: 'size', label: 'Size' },
@@ -96,6 +99,7 @@ const tabApiMap = {
       { key: 'eduUsername', label: 'Username' },
       { key: 'name', label: 'Name' },
       { key: 'surname', label: 'Surname' },
+      { key: 'email', label: 'Email' }, // email = signUpMail
       { key: 'gender', label: 'Gender' },
       { key: 'institution', label: 'Institution' },
       { key: 'titles', label: 'Titles' },
@@ -239,7 +243,7 @@ function UsersPage() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10">
-      <div className="w-full max-w-5xl bg-white rounded shadow p-8">
+      <div className="w-full bg-white rounded shadow p-8">
         
         <div className="flex justify-end mt-8">
           <button
@@ -324,6 +328,8 @@ function UsersPage() {
                         <img src={user[col.key]} alt="profile" className="w-8 h-8 rounded-full object-cover" />
                       ) : col.key === 'logoSrc' && user[col.key] ? (
                         <img src={user[col.key]} alt="logo" className="w-8 h-8 rounded object-contain bg-white border" />
+                      ) : col.key === 'email' ? (
+                        user.signUpMail ? <a href={`mailto:${user.signUpMail}`} className="text-blue-600 underline">{user.signUpMail}</a> : <span className="text-gray-400">-</span>
                       ) : Array.isArray(user[col.key]) ? (
                         user[col.key].length > 0 ? user[col.key].join(', ') : <span className="text-gray-400">-</span>
                       ) : (['website','linkedin','twitter','instagram','youtube'].includes(col.key) && user[col.key]) ? (
