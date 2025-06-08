@@ -124,6 +124,12 @@ function UsersPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ currentPage: 1, totalPages: 1, hasMore: false, totalItems: 0 });
   const [limit, setLimit] = useState(15); // Sayfa başı kullanıcı
+  const [showMailModal, setShowMailModal] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string; description?: string }[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [mailError, setMailError] = useState<string | null>(null);
 
   // Login kontrolü
   useEffect(() => {
@@ -236,7 +242,52 @@ function UsersPage() {
 
   // Send mail butonu
   const handleSendMail = () => {
-    alert('Seçili kullanıcılara mail gönderilecek: ' + selected.join(', '));
+    setShowMailModal(true);
+  };
+
+  // Modalda template'leri çek
+  useEffect(() => {
+    if (!showMailModal) return;
+    setLoadingTemplates(true);
+    setMailError(null);
+    fetch('http://localhost:8000/api/email-templates', { credentials: 'include' })
+      .then(async res => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Mail şablonları alınamadı.');
+        }
+        return res.json();
+      })
+      .then(data => setTemplates(Array.isArray(data.templates) ? data.templates : []))
+      .catch(e => setMailError(e.message || 'Mail şablonları alınamadı.'))
+      .finally(() => setLoadingTemplates(false));
+  }, [showMailModal]);
+
+  // Modalda mail gönder
+  const handleSendEmails = () => {
+    if (!selectedTemplate) return;
+    setSending(true);
+    setMailError(null);
+    fetch('/api/send-emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        userIds: selected,
+        templateId: selectedTemplate,
+        userType: activeTab,
+      }),
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Mail gönderilemedi');
+        return res.json();
+      })
+      .then(() => {
+        setShowMailModal(false);
+        setSelected([]);
+      })
+      .catch(() => setMailError('Mail gönderilemedi.'))
+      .finally(() => setSending(false));
   };
 
   if (!authChecked) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
@@ -295,6 +346,50 @@ function UsersPage() {
             >
               Send mail(s)
             </button>
+          </div>
+        )}
+        {/* Mail Modal */}
+        {showMailModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white rounded shadow-lg p-6 w-full max-w-md relative">
+              <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-700" onClick={() => setShowMailModal(false)}>&times;</button>
+              <h2 className="text-lg font-bold mb-4">Mail Şablonu Seç</h2>
+              {loadingTemplates ? (
+                <div>Şablonlar yükleniyor...</div>
+              ) : templates.length === 0 ? (
+                <div className="flex flex-col gap-2">
+                  <div>Hiç şablon yok.</div>
+                  <button className="bg-blue-500 text-white px-3 py-1 rounded" onClick={() => navigate('/dashboard/add-template')}>Yeni Template Ekle</button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-3 max-h-72 overflow-y-auto mb-4">
+                    {templates.map(t => (
+                      <div
+                        key={t.id}
+                        className={`border rounded p-3 cursor-pointer transition-all duration-150 ${selectedTemplate === t.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}
+                        onClick={() => setSelectedTemplate(t.id)}
+                      >
+                        <div className="font-semibold text-lg text-gray-800 flex items-center gap-2">
+                          <span>{t.name}</span>
+                          {selectedTemplate === t.id && <span className="ml-2 text-blue-500">✓</span>}
+                        </div>
+                        {t.description && <div className="text-gray-500 text-sm mt-1">{t.description}</div>}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className="bg-green-600 text-white px-4 py-2 rounded w-full disabled:opacity-50"
+                    disabled={!selectedTemplate || sending}
+                    onClick={handleSendEmails}
+                  >
+                    {sending ? 'Gönderiliyor...' : 'Gönder'}
+                  </button>
+                  <button className="mt-2 text-blue-600 underline w-full" onClick={() => navigate('/add-template')}>Yeni Template Ekle</button>
+                </>
+              )}
+              {mailError && <div className="text-red-600 mt-2">{mailError}</div>}
+            </div>
           </div>
         )}
         {/* Tab Content: Kullanıcı listesi */}
