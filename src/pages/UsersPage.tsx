@@ -15,23 +15,25 @@ interface Pagination {
 }
 
 const tabApiMap = {
-  Student: { url: '/api/users/student', key: 'students', columns: [
-    { key: 'eduUsername', label: 'Username' },
-    { key: 'name', label: 'Name' },
-    { key: 'surname', label: 'Surname' },
-    { key: 'email', label: 'Email' }, // email = signUpMail
-    { key: 'imageSrc', label: 'Image' },
-    { key: 'gender', label: 'Gender' },
-    { key: 'institution', label: 'Institution' },
-    { key: 'department', label: 'Department' },
-    { key: 'grade', label: 'Grade' },
-    { key: 'bio', label: 'Bio' },
-    { key: 'isVerifiedAccount', label: 'Verified Account' },
-    { key: 'isEduMailVerified', label: 'Edu Mail Verified' },
-    { key: 'arxps', label: 'XP' },
-    { key: 'createdAt', label: 'Created At' },
-    { key: 'updatedAt', label: 'Updated At' },
-  ] },
+  Student: {
+    url: '/api/users/student', key: 'students', columns: [
+      { key: 'eduUsername', label: 'Username' },
+      { key: 'name', label: 'Name' },
+      { key: 'surname', label: 'Surname' },
+      { key: 'email', label: 'Email' }, // email = signUpMail
+      { key: 'imageSrc', label: 'Image' },
+      { key: 'gender', label: 'Gender' },
+      { key: 'institution', label: 'Institution' },
+      { key: 'department', label: 'Department' },
+      { key: 'grade', label: 'Grade' },
+      { key: 'bio', label: 'Bio' },
+      { key: 'isVerifiedAccount', label: 'Verified Account' },
+      { key: 'isEduMailVerified', label: 'Edu Mail Verified' },
+      { key: 'arxps', label: 'XP' },
+      { key: 'createdAt', label: 'Created At' },
+      { key: 'updatedAt', label: 'Updated At' },
+    ]
+  },
   Community: {
     url: '/api/users/community',
     key: 'communities',
@@ -158,7 +160,7 @@ function UsersPage() {
     setUsers([]);
     setSelected([]);
     const { url, key } = tabApiMap[activeTab];
-    fetch(`http://localhost:8000${url}?page=${pagination.currentPage}&limit=${limit}` , {
+    fetch(`http://localhost:8000${url}?page=${pagination.currentPage}&limit=${limit}`, {
       credentials: 'include',
     })
       .then(res => {
@@ -206,7 +208,7 @@ function UsersPage() {
     setUsers([]);
     setSelected([]);
     const { url, key } = tabApiMap[activeTab];
-    fetch(`http://localhost:8000${url}?page=${pagination.currentPage}&limit=${limit}` , {
+    fetch(`http://localhost:8000${url}?page=${pagination.currentPage}&limit=${limit}`, {
       credentials: 'include',
     })
       .then(res => {
@@ -268,14 +270,27 @@ function UsersPage() {
     if (!selectedTemplate) return;
     setSending(true);
     setMailError(null);
-    fetch('/api/send-emails', {
+    // Seçili kullanıcıların mail adreslerini ve isimlerini bul
+    const selectedUsers = users.filter(u => selected.includes(u.id || u.eduUsername || u.name));
+    // Her user için mail adresi farklı key'de olabilir, öncelik sırası: signUpMail, contactMail, email
+    const emails = selectedUsers.map(u => u.signUpMail || u.contactMail || u.email).filter(Boolean);
+    // Her email için parametre objesi oluştur (ör: { email: { name: ... } })
+    const templateParams: Record<string, any> = {};
+    selectedUsers.forEach(u => {
+      const email = u.signUpMail || u.contactMail || u.email;
+      if (email) {
+        templateParams[email] = { name: u.name || u.fullName || u.eduUsername || email };
+      }
+    });
+    fetch('http://localhost:8000/api/send-emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
-        userIds: selected,
+        emails,
         templateId: selectedTemplate,
         userType: activeTab,
+        templateParams,
       }),
     })
       .then(res => {
@@ -295,7 +310,7 @@ function UsersPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10">
       <div className="w-full bg-white rounded shadow p-8">
-        
+
         <div className="flex justify-end mt-8">
           <button
             className="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-900"
@@ -385,7 +400,7 @@ function UsersPage() {
                   >
                     {sending ? 'Gönderiliyor...' : 'Gönder'}
                   </button>
-                  <button className="mt-2 text-blue-600 underline w-full" onClick={() => navigate('/add-template')}>Yeni Template Ekle</button>
+                  <button className="mt-2 text-blue-600 underline w-full" onClick={() => navigate('/dashboard/add-template')}>Yeni Template Ekle</button>
                 </>
               )}
               {mailError && <div className="text-red-600 mt-2">{mailError}</div>}
@@ -427,7 +442,7 @@ function UsersPage() {
                         user.signUpMail ? <a href={`mailto:${user.signUpMail}`} className="text-blue-600 underline">{user.signUpMail}</a> : <span className="text-gray-400">-</span>
                       ) : Array.isArray(user[col.key]) ? (
                         user[col.key].length > 0 ? user[col.key].join(', ') : <span className="text-gray-400">-</span>
-                      ) : (['website','linkedin','twitter','instagram','youtube'].includes(col.key) && user[col.key]) ? (
+                      ) : (['website', 'linkedin', 'twitter', 'instagram', 'youtube'].includes(col.key) && user[col.key]) ? (
                         <a href={user[col.key].startsWith('http') ? user[col.key] : `https://${user[col.key]}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{col.label}</a>
                       ) : col.key === 'contactMail' && user[col.key] ? (
                         <a href={`mailto:${user[col.key]}`} className="text-blue-600 underline">{user[col.key]}</a>
@@ -469,7 +484,7 @@ function UsersPage() {
           </button>
         </div>
         {/* Dashboard'a dön butonu */}
-        
+
       </div>
     </div>
   );

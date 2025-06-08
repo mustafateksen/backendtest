@@ -7,9 +7,7 @@ export default function AddTemplate() {
   const [authChecked, setAuthChecked] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [code, setCode] = useState(`import * as React from 'react';
-
-export default function MyTemplate({ name }) {
+  const [code, setCode] = useState(`export default function MyTemplate({ name }) {
   return (
     <div>
       <h1>Merhaba, {name}</h1>
@@ -47,13 +45,16 @@ export default function MyTemplate({ name }) {
     setError(null);
     setSuccess(false);
     try {
-      // Backend artık doğrudan supabase import ile çalışıyor, proxy ayarına dikkat!
-      // Vite dev server kullanıyorsan, proxy ayarında /api istekleri backend'e yönlenmeli
+      // import ve export satırlarını otomatik olarak temizle
+      const cleanedCode = code
+        .split('\n')
+        .filter(line => !/^\s*(import|export)/.test(line.trim()))
+        .join('\n');
       const res = await fetch('http://localhost:8000/api/email-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ name, description, code }),
+        body: JSON.stringify({ name, description, code: cleanedCode }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
