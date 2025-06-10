@@ -57,9 +57,6 @@ function Dashboard() {
         <div className="mt-2">
           <a href="/dashboard/users" className="text-blue-600 underline hover:text-blue-800">Users</a>
         </div>
-         <div className="mt-2">
-          <a href="/dashboard/add-template" className="text-blue-600 underline hover:text-blue-800">Add Template</a>
-        </div>
       </div>
     </div>
   );

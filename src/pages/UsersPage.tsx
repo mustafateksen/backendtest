@@ -126,12 +126,6 @@ function UsersPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ currentPage: 1, totalPages: 1, hasMore: false, totalItems: 0 });
   const [limit, setLimit] = useState(15); // Sayfa başı kullanıcı
-  const [showMailModal, setShowMailModal] = useState(false);
-  const [templates, setTemplates] = useState<{ id: string; name: string; description?: string }[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [mailError, setMailError] = useState<string | null>(null);
 
   // Login kontrolü
   useEffect(() => {
@@ -242,16 +236,28 @@ function UsersPage() {
     else setSelected(users.map(u => u.id));
   };
 
-  // Send mail butonu
-  const handleSendMail = () => {
-    setShowMailModal(true);
-  };
+  // --- SEND EMAIL MODAL STATE ---
+  const [showSendEmailModal, setShowSendEmailModal] = useState(false);
+  const [templates, setTemplates] = useState<Array<{ name: string; file: string; previewHtml: string; variables?: Array<{ key: string; label: string; defaultValue: string; currentValue?: string }> }>>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [dynamicNameEnabled, setDynamicNameEnabled] = useState(false);
 
-  // Modalda template'leri çek
-  useEffect(() => {
-    if (!showMailModal) return;
+  // Send Email butonuna basınca modalı aç
+  const handleSendEmail = () => {
+    setShowSendEmailModal(true);
+    setSelectedTemplate(null);
+    setTemplateError(null);
+    setShowPreview(false);
+    setPreviewHtml('');
+    setEmailSubject('');
+    setDynamicNameEnabled(false);
     setLoadingTemplates(true);
-    setMailError(null);
     fetch('http://localhost:8000/api/email-templates', { credentials: 'include' })
       .then(async res => {
         if (!res.ok) {
@@ -260,49 +266,172 @@ function UsersPage() {
         }
         return res.json();
       })
-      .then(data => setTemplates(Array.isArray(data.templates) ? data.templates : []))
-      .catch(e => setMailError(e.message || 'Mail şablonları alınamadı.'))
+      .then(data => {
+        console.log('Tüm şablonlar:', data.templates);
+        setTemplates(Array.isArray(data.templates) ? data.templates : []);
+      })
+      .catch(e => setTemplateError(e.message || 'Mail şablonları alınamadı.'))
       .finally(() => setLoadingTemplates(false));
-  }, [showMailModal]);
+  };
 
-  // Modalda mail gönder
-  const handleSendEmails = () => {
+  // Seçili template değişkenleri state
+  const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
+
+  // Template seçildiğinde defaultları yükle (artık backendden gelen variables ile):
+  useEffect(() => {
+    if (!selectedTemplate) {
+      setTemplateVars({});
+      setDynamicNameEnabled(false); // Template değiştiğinde dynamic name'i sıfırla
+      return;
+    }
+    const selected = templates.find(t => String(t.file).trim() === String(selectedTemplate).trim());
+    console.log('Seçili şablon:', selected);
+    
+    // Eğer template'de recipientName yoksa dynamic name'i kapat
+    const hasRecipientName = selected?.variables?.some(v => v.key === 'recipientName');
+    if (!hasRecipientName) {
+      setDynamicNameEnabled(false);
+    }
+    
+    if (selected && Array.isArray(selected.variables) && selected.variables.length > 0) {
+      const vars = selected.variables.reduce((acc: Record<string, string>, v) => {
+        // Önce currentValue varsa onu kullan, yoksa defaultValue'yu kullan
+        acc[v.key] = v.currentValue ?? v.defaultValue ?? '';
+        return acc;
+      }, {});
+      setTemplateVars(vars);
+    } else {
+      setTemplateVars({});
+    }
+  }, [selectedTemplate, templates]);
+
+  // Input değişimi
+  const handleVarChange = (key: string, value: string) => {
+    setTemplateVars(vars => ({ ...vars, [key]: value }));
+    // Değişken değiştiğinde preview'i sıfırla ki yeni preview alınsın
+    setShowPreview(false);
+    setPreviewHtml('');
+  };
+
+  // Dinamik isim özelliğini aç/kapat
+  const toggleDynamicName = () => {
+    setDynamicNameEnabled(!dynamicNameEnabled);
+    if (!dynamicNameEnabled) {
+      // Dinamik mod açılıyorsa recipientName'i placeholder ile doldur
+      setTemplateVars(vars => ({ ...vars, recipientName: '[DYNAMIC_NAME]' }));
+    } else {
+      // Dinamik mod kapatılıyorsa boş string yap
+      setTemplateVars(vars => ({ ...vars, recipientName: '' }));
+    }
+    // Preview'i sıfırla
+    setShowPreview(false);
+    setPreviewHtml('');
+  };
+
+  // Preview butonuna basınca template'i backend'den alıp göster
+  const handlePreview = async () => {
     if (!selectedTemplate) return;
-    setSending(true);
-    setMailError(null);
-    // Seçili kullanıcıların mail adreslerini ve isimlerini bul
-    const selectedUsers = users.filter(u => selected.includes(u.id || u.eduUsername || u.name));
-    // Her user için mail adresi farklı key'de olabilir, öncelik sırası: signUpMail, contactMail, email
-    const emails = selectedUsers.map(u => u.signUpMail || u.contactMail || u.email).filter(Boolean);
-    // Her email için parametre objesi oluştur (ör: { email: { name: ... } })
-    const templateParams: Record<string, any> = {};
-    selectedUsers.forEach(u => {
-      const email = u.signUpMail || u.contactMail || u.email;
-      if (email) {
-        templateParams[email] = { name: u.name || u.fullName || u.eduUsername || email };
+    
+    setLoadingPreview(true);
+    try {
+      const response = await fetch('http://localhost:8000/api/email-templates/preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          templateFile: selectedTemplate,
+          variables: templateVars
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Preview alınamadı');
       }
-    });
-    fetch('http://localhost:8000/api/send-emails', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        emails,
-        templateId: selectedTemplate,
-        userType: activeTab,
-        templateParams,
-      }),
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Mail gönderilemedi');
-        return res.json();
-      })
-      .then(() => {
-        setShowMailModal(false);
+
+      const data = await response.json();
+      setPreviewHtml(data.html || '');
+      setShowPreview(true);
+    } catch (error) {
+      console.error('Preview error:', error);
+      alert('Template preview alınamadı');
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  // Email gönderme fonksiyonu
+  const handleSendEmailAction = async () => {
+    if (!selectedTemplate || !emailSubject || selected.length === 0) return;
+    
+    const confirmMessage = dynamicNameEnabled 
+      ? `${selected.length} kullanıcıya "${emailSubject}" konulu KİŞİSELLEŞTİRİLMİŞ email gönderilecek.\n\nHer kullanıcı kendi ismi ile email alacak. Emin misiniz?`
+      : `${selected.length} kullanıcıya "${emailSubject}" konulu email gönderilecek. Emin misiniz?`;
+    
+    const confirmed = window.confirm(confirmMessage);
+    if (!confirmed) return;
+
+    try {
+      // Seçili kullanıcıların email adreslerini ve bilgilerini topla
+      const selectedUsers = users.filter(user => 
+        selected.includes(user.id || user.eduUsername || user.name)
+      );
+      
+      const emailAddresses = selectedUsers.map(user => user.signUpMail || user.email).filter(Boolean);
+      
+      if (emailAddresses.length === 0) {
+        alert('Seçili kullanıcıların email adresleri bulunamadı.');
+        return;
+      }
+
+      // Dinamik isim özelliği aktifse kullanıcı bilgilerini de gönder
+      const emailData = {
+        to: emailAddresses,
+        subject: emailSubject,
+        templateFile: selectedTemplate,
+        variables: templateVars,
+        ...(dynamicNameEnabled && {
+          dynamicName: true,
+          users: selectedUsers.map(user => ({
+            email: user.signUpMail || user.email,
+            name: user.name || user.fullName || user.eduUsername || 'Kullanıcı',
+            // Diğer yararlı bilgiler
+            institution: user.institution,
+            department: user.department,
+            title: user.titles?.[0] || user.title
+          }))
+        })
+      };
+
+      const response = await fetch('http://localhost:8000/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(emailData)
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        const message = dynamicNameEnabled 
+          ? `Email başarıyla gönderildi! ${emailAddresses.length} kullanıcıya kişiselleştirilmiş email ulaştı.`
+          : `Email başarıyla gönderildi! ${emailAddresses.length} kullanıcıya ulaştı.`;
+        alert(message);
+        setShowSendEmailModal(false);
+        setShowPreview(false);
+        setPreviewHtml('');
         setSelected([]);
-      })
-      .catch(() => setMailError('Mail gönderilemedi.'))
-      .finally(() => setSending(false));
+        setDynamicNameEnabled(false);
+      } else {
+        throw new Error(result.error || 'Email gönderimi başarısız');
+      }
+    } catch (error) {
+      console.error('Send email error:', error);
+      alert('Email gönderimi başarısız: ' + (error as Error).message);
+    }
   };
 
   if (!authChecked) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
@@ -310,7 +439,6 @@ function UsersPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10">
       <div className="w-full bg-white rounded shadow p-8">
-
         <div className="flex justify-end mt-8">
           <button
             className="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-900"
@@ -352,61 +480,6 @@ function UsersPage() {
             <option value={30}>30</option>
           </select>
         </div>
-        {/* Send mail(s) butonu */}
-        {selected.length > 0 && (
-          <div className="flex justify-end mb-4">
-            <button
-              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-              onClick={handleSendMail}
-            >
-              Send mail(s)
-            </button>
-          </div>
-        )}
-        {/* Mail Modal */}
-        {showMailModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-            <div className="bg-white rounded shadow-lg p-6 w-full max-w-md relative">
-              <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-700" onClick={() => setShowMailModal(false)}>&times;</button>
-              <h2 className="text-lg font-bold mb-4">Mail Şablonu Seç</h2>
-              {loadingTemplates ? (
-                <div>Şablonlar yükleniyor...</div>
-              ) : templates.length === 0 ? (
-                <div className="flex flex-col gap-2">
-                  <div>Hiç şablon yok.</div>
-                  <button className="bg-blue-500 text-white px-3 py-1 rounded" onClick={() => navigate('/dashboard/add-template')}>Yeni Template Ekle</button>
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-3 max-h-72 overflow-y-auto mb-4">
-                    {templates.map(t => (
-                      <div
-                        key={t.id}
-                        className={`border rounded p-3 cursor-pointer transition-all duration-150 ${selectedTemplate === t.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}
-                        onClick={() => setSelectedTemplate(t.id)}
-                      >
-                        <div className="font-semibold text-lg text-gray-800 flex items-center gap-2">
-                          <span>{t.name}</span>
-                          {selectedTemplate === t.id && <span className="ml-2 text-blue-500">✓</span>}
-                        </div>
-                        {t.description && <div className="text-gray-500 text-sm mt-1">{t.description}</div>}
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    className="bg-green-600 text-white px-4 py-2 rounded w-full disabled:opacity-50"
-                    disabled={!selectedTemplate || sending}
-                    onClick={handleSendEmails}
-                  >
-                    {sending ? 'Gönderiliyor...' : 'Gönder'}
-                  </button>
-                  <button className="mt-2 text-blue-600 underline w-full" onClick={() => navigate('/dashboard/add-template')}>Yeni Template Ekle</button>
-                </>
-              )}
-              {mailError && <div className="text-red-600 mt-2">{mailError}</div>}
-            </div>
-          </div>
-        )}
         {/* Tab Content: Kullanıcı listesi */}
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white border rounded">
@@ -483,8 +556,164 @@ function UsersPage() {
             Sonraki
           </button>
         </div>
-        {/* Dashboard'a dön butonu */}
-
+        {/* Send Email butonu */}
+        {selected.length > 0 && (
+          <div className="flex justify-end mb-4">
+            <button
+              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+              onClick={handleSendEmail}
+            >
+              Send Email
+            </button>
+          </div>
+        )}
+        {/* Send Email Modal */}
+        {showSendEmailModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white rounded shadow-lg p-8 w-full max-w-3xl relative">
+              <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-3xl" onClick={() => {
+                setShowSendEmailModal(false);
+                setShowPreview(false);
+                setPreviewHtml('');
+                setDynamicNameEnabled(false);
+              }}>&times;</button>
+              <h2 className="text-2xl font-bold mb-6">Send Email to Selected Users</h2>
+              {/* Eposta konusu inputu */}
+              <div className="mb-6">
+                <label className="block text-lg font-medium mb-2" htmlFor="emailSubject">Email Subject</label>
+                <input
+                  id="emailSubject"
+                  type="text"
+                  className="w-full border rounded px-4 py-2 text-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  value={emailSubject}
+                  onChange={e => setEmailSubject(e.target.value)}
+                  placeholder="Enter email subject..."
+                />
+              </div>
+              {/* Template seçimi dropdown */}
+              <div className="mb-8">
+                <label className="block text-lg font-medium mb-2" htmlFor="templateSelect">Select Template</label>
+                <select
+                  id="templateSelect"
+                  className="w-full border rounded px-4 py-2 text-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  value={selectedTemplate || ''}
+                  onChange={e => setSelectedTemplate(e.target.value)}
+                  disabled={loadingTemplates || templates.length === 0}
+                >
+                  <option value="" disabled>Select a template...</option>
+                  {templates.map(t => (
+                    <option key={t.file} value={t.file}>{t.name}</option>
+                  ))}
+                </select>
+                {loadingTemplates && <div className="mt-2 text-gray-500">Templates loading...</div>}
+                {templateError && <div className="mt-2 text-red-600">{templateError}</div>}
+                {!loadingTemplates && !templateError && templates.length === 0 && <div className="mt-2 text-gray-500">No templates found.</div>}
+              </div>
+              {/* Şablon değişkenleri paneli */}
+              {selectedTemplate && (
+                <div className="mb-8 border rounded bg-gray-50 p-4">
+                  <div className="font-semibold text-lg mb-4">Şablon Değişkenleri</div>
+                  {(() => {
+                    const selected = templates.find(t => String(t.file).trim() === String(selectedTemplate).trim());
+                    let vars = Array.isArray(selected?.variables) ? selected.variables : [];
+                    if (!vars || vars.length === 0) {
+                      // Ekstra uyarı: Backend'den variables hiç gelmiyorsa
+                      if (selected && !Array.isArray(selected.variables)) {
+                        return <div className="text-red-500 italic">Bu şablonun değişkenleri backend tarafından bulunamadı. Şablonun export şekli veya interface tanımı kontrol edilmeli.</div>;
+                      }
+                      return <div className="text-gray-500 italic">Bu şablonun değişkeni yok.</div>;
+                    }
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {vars.map((v) => (
+                          <div key={v.key} className="flex flex-col mb-2">
+                            <label className="text-base font-medium mb-1" htmlFor={`var-${v.key}`}>{v.label || v.key}</label>
+                            <div className="relative">
+                              <input
+                                id={`var-${v.key}`}
+                                type="text"
+                                className={`border rounded px-3 py-2 text-base ${v.key === 'recipientName' ? 'pr-12' : ''} ${dynamicNameEnabled && v.key === 'recipientName' ? 'bg-gray-100' : ''}`}
+                                value={templateVars[v.key] ?? v.currentValue ?? v.defaultValue ?? ''}
+                                onChange={e => handleVarChange(v.key, e.target.value)}
+                                placeholder={v.label || v.key}
+                                disabled={dynamicNameEnabled && v.key === 'recipientName'}
+                              />
+                              {v.key === 'recipientName' && (
+                                <button
+                                  type="button"
+                                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${
+                                    dynamicNameEnabled ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                  }`}
+                                  onClick={toggleDynamicName}
+                                  title={dynamicNameEnabled ? 'Manuel isim girişi yap' : 'Dinamik isim kullan (Her kullanıcıya kendi ismi)'}
+                                >
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                            {v.key === 'recipientName' && dynamicNameEnabled && (
+                              <div className="text-sm text-blue-600 mt-1">
+                                📧 Her kullanıcıya kendi ismi ile email gönderilecek
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+              {/* Seçili template önizlemesi */}
+              {showPreview && (
+                <div className="mb-8">
+                  <div className="font-semibold text-lg mb-2 flex items-center gap-2">
+                    Template Preview
+                    {dynamicNameEnabled && (
+                      <span className="text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                        🔄 Dinamik isim aktif
+                      </span>
+                    )}
+                  </div>
+                  {dynamicNameEnabled && (
+                    <div className="text-sm text-blue-600 mb-2 p-2 bg-blue-50 rounded border-l-4 border-blue-400">
+                      💡 Preview'de "[DYNAMIC_NAME]" görüyorsanız, gerçek emailde her kullanıcının kendi ismi yer alacak.
+                    </div>
+                  )}
+                  <div className="border rounded bg-gray-50 p-4 overflow-x-auto" style={{ minHeight: 200, maxHeight: 400 }}
+                    dangerouslySetInnerHTML={{ __html: previewHtml }}
+                  />
+                </div>
+              )}
+              
+              <div className="flex gap-4">
+                <button
+                  className="bg-blue-600 text-white px-6 py-3 rounded text-lg flex-1 disabled:opacity-50"
+                  disabled={!selectedTemplate || !emailSubject || loadingPreview}
+                  onClick={handlePreview}
+                >
+                  {loadingPreview ? 'Loading Preview...' : 'Preview'}
+                </button>
+                
+                {showPreview && (
+                  <button
+                    className="bg-green-600 text-white px-6 py-3 rounded text-lg flex-1 disabled:opacity-50 flex items-center justify-center gap-2"
+                    disabled={!selectedTemplate || !emailSubject}
+                    onClick={handleSendEmailAction}
+                  >
+                    {dynamicNameEnabled && (
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    {dynamicNameEnabled ? 'Send Personalized Emails' : 'Send Email'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
